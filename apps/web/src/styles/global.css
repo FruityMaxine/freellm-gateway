@@ -1,0 +1,126 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+@theme inline {
+  --color-canvas: var(--color-canvas);
+  --color-surface-soft: var(--color-surface-soft);
+  --color-surface-card: var(--color-surface-card);
+  --color-surface-elevated: var(--color-surface-elevated);
+  --color-surface-glow: var(--color-surface-glow);
+  --color-ink: var(--color-ink);
+  --color-body: var(--color-body);
+  --color-body-strong: var(--color-body-strong);
+  --color-muted: var(--color-muted);
+  --color-muted-soft: var(--color-muted-soft);
+  --color-hairline: var(--color-hairline);
+  --color-hairline-strong: var(--color-hairline-strong);
+  --color-primary: var(--color-primary);
+  --color-primary-active: var(--color-primary-active);
+  --color-on-primary: var(--color-on-primary);
+  --color-accent-emerald: var(--color-accent-emerald);
+  --color-accent-rose: var(--color-accent-rose);
+  --color-accent-blue: var(--color-accent-blue);
+  --color-accent-cyan: var(--color-accent-cyan);
+  --color-accent-magenta: var(--color-accent-magenta);
+  --color-accent-amber: var(--color-accent-amber);
+  --color-accent-violet: var(--color-accent-violet);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-error: var(--color-error);
+  --color-info: var(--color-info);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --shadow-glow: var(--shadow-glow);
+  --shadow-glow-soft: var(--shadow-glow-soft);
+  --shadow-card: var(--shadow-card);
+  --shadow-elevated: var(--shadow-elevated);
+  --shadow-hairline: var(--shadow-hairline);
+  --shadow-focus: var(--shadow-focus);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+  --radius-3xl: var(--radius-3xl);
+}
+
+* {
+  border-color: var(--color-hairline);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  font-variant-ligatures: contextual;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background:
+    radial-gradient(1100px 600px at 12% -20%, rgba(250, 255, 105, 0.04), transparent 60%),
+    radial-gradient(900px 500px at 110% 110%, rgba(139, 92, 246, 0.06), transparent 60%),
+    var(--color-canvas);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+::selection {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: var(--radius-md);
+}
+
+/* Scrollbars — minimalist */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-elevated);
+  border-radius: var(--radius-full, 9999px);
+  border: 2px solid var(--color-canvas);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-surface-glow);
+}
+
+/* Mono digits in metric cards */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle glow text */
+.text-glow {
+  text-shadow: 0 0 24px rgba(250, 255, 105, 0.45);
+}
+
+/* Reduce motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

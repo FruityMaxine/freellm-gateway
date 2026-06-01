@@ -1,0 +1,72 @@
+{
+  "_meta": {
+    "description": "AI 回归测试基线数据。记录路由 / 权限 / 错误分类的预期决策，用于检测后续 tick 是否破坏既定行为。",
+    "version": "0.9.1.0",
+    "lastUpdated": "2026-05-23",
+    "policy": "出现偏差时优先 fail 测试。若改动合理则同步更新 baseline 并写入 commit message。"
+  },
+  "routing": [
+    {
+      "scenario": "auto-best-free 优先 isFree=true 且评分最高",
+      "inputAlias": "free/auto",
+      "expectedTopProviderSlug": "openrouter",
+      "expectedIsFree": true,
+      "expectedRationaleIncludes": "auto-best-free"
+    },
+    {
+      "scenario": "blacklisted 模型永不进入候选",
+      "inputAlias": "free/auto",
+      "expectExcludeModelId": "m-blacklisted",
+      "expectedReasonIncludes": "blacklist"
+    },
+    {
+      "scenario": "openrouter/free 直通别名只取一个候选",
+      "inputAlias": "openrouter/free",
+      "expectedTopUpstreamId": "openrouter/free"
+    }
+  ],
+  "permissions": [
+    {
+      "scenario": "deniedModels 完全屏蔽指定 upstreamId",
+      "deniedModels": ["meta/llama-3.3-70b-instruct:free"],
+      "expectExcludeUpstreamId": "meta/llama-3.3-70b-instruct:free"
+    },
+    {
+      "scenario": "allowedProviders 之外的上游不进入候选",
+      "allowedProviders": ["openai"],
+      "expectAllProviderSlug": "openai"
+    },
+    {
+      "scenario": "allowPaidModels=false 阻止付费模型回退",
+      "allowPaidModels": false,
+      "expectExcludeIsFree": false
+    }
+  ],
+  "errors": [
+    {
+      "scenario": "429 状态归类为 rate_limited",
+      "status": 429,
+      "message": "Too Many Requests",
+      "expectedKind": "rate_limited"
+    },
+    {
+      "scenario": "500 状态归类为 provider_unavailable",
+      "status": 500,
+      "message": "Internal Server Error",
+      "expectedKind": "provider_unavailable"
+    },
+    {
+      "scenario": "AbortError 归类为 timeout",
+      "status": null,
+      "message": "The operation was aborted",
+      "causeName": "AbortError",
+      "expectedKind": "timeout"
+    },
+    {
+      "scenario": "ECONNRESET 归类为 network_error",
+      "status": null,
+      "message": "ECONNRESET",
+      "expectedKind": "network_error"
+    }
+  ]
+}

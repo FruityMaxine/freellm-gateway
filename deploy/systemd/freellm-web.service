@@ -1,0 +1,42 @@
+[Unit]
+Description=FreeLLM Web (Vite SPA static via npx serve)
+Documentation=file:///opt/freellm/docs/DEPLOYMENT.md
+After=network-online.target freellm-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=freellm
+Group=freellm
+WorkingDirectory=/opt/freellm/apps/web
+# Static SPA: served by `npx serve` to keep the deploy zero-Docker.
+# If you prefer Caddy file_server, see deploy/caddy/freellm.Caddyfile for that path
+# and disable this unit.
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npx --yes serve -s dist -l 127.0.0.1:8080 --no-clipboard --no-port-switching
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+MemoryMax=300M
+CPUQuota=80%
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=freellm-web
+
+[Install]
+WantedBy=multi-user.target

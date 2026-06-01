@@ -1,0 +1,102 @@
+# ============================================================
+# FreeLLM Web Admin · freellm.example.com → 静态 SPA
+# Tick 52 部署 (2026-05-24)
+# token + cookie + referer 三层守门（参考 polyham 模式）
+# /healthz 放行供 portal-api 探测
+# ============================================================
+freellm.example.com {
+	encode gzip zstd
+
+	# 健康检查放行（直接打 API 后端）
+	@health path /health /healthz /readyz
+	handle @health {
+		reverse_proxy 127.0.0.1:18610 {
+			rewrite /health
+		}
+	}
+
+	# 第一次进入：?pass=<token>
+	@with_token query pass=REPLACE_WITH_RANDOM_32CHAR_HEX_TOKEN
+	handle @with_token {
+		header Set-Cookie "freellm_pass=REPLACE_WITH_RANDOM_32CHAR_HEX_TOKEN; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax"
+		redir {http.request.uri.path} 302
+	}
+
+	# 已有 cookie：放行 → 静态 SPA + /admin/* 反代到 API
+	@has_pass header_regexp Cookie freellm_pass=REPLACE_WITH_RANDOM_32CHAR_HEX_TOKEN
+	handle @has_pass {
+		@api path /admin/* /v1/* /public/*
+		handle @api {
+			reverse_proxy 127.0.0.1:18610
+		}
+		handle {
+			root * /opt/freellm/apps/web/dist
+			# Tick 58: 用 route 显式按顺序处理 — /assets/* 走 file_server 不 fallback
+			route {
+				@asset path /assets/*
+				file_server @asset
+				# 其余 SPA 路径 fallback 到 index.html
+				try_files {path} /index.html
+				file_server
+			}
+		}
+	}
+
+	# Referer 同源（从 portal Homepage 跳进来，备用通道）
+	@from_hub header_regexp Referer ^https://portal\.example\.org
+	handle @from_hub {
+		header Set-Cookie "freellm_pass=REPLACE_WITH_RANDOM_32CHAR_HEX_TOKEN; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax"
+		@api2 path /admin/* /v1/* /public/*
+		handle @api2 {
+			reverse_proxy 127.0.0.1:18610
+		}
+		handle {
+			root * /opt/freellm/apps/web/dist
+			# Tick 58: 用 route 显式按顺序处理 — /assets/* 走 file_server 不 fallback
+			route {
+				@asset path /assets/*
+				file_server @asset
+				# 其余 SPA 路径 fallback 到 index.html
+				try_files {path} /index.html
+				file_server
+			}
+		}
+	}
+
+	# 三关全不命中 → 回 Homepage
+	handle {
+		redir https://example.com/ 302
+	}
+}
+
+# ============================================================
+# FreeLLM OpenAI-Compatible API · freellm.example.com
+# /v1/* + /public/* 公开（自带虚拟密钥 Bearer 鉴权）
+# /admin/* 内部 → 一律 403（管理后台必须从 freellm.example.com 入口）
+# ============================================================
+freellm.example.com {
+	encode gzip zstd
+
+	@admin path /admin/*
+	handle @admin {
+		respond "管理 API 不开放给公网，请从 https://freellm.example.com/ 进入" 403
+	}
+
+	@health path /health /healthz /readyz
+	handle @health {
+		reverse_proxy 127.0.0.1:18610 {
+			rewrite /health
+		}
+	}
+
+	# /v1/* (OpenAI-compatible) + /public/* (demo key 等)
+	@public path /v1/* /public/*
+	handle @public {
+		reverse_proxy 127.0.0.1:18610
+	}
+
+	# 其他路径 → 404
+	handle {
+		respond "Not Found" 404
+	}
+}

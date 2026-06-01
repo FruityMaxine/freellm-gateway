@@ -1,0 +1,57 @@
+{
+  "name": "freellm",
+  "version": "1.28.0.0",
+  "private": true,
+  "description": "FreeLLM — Adaptive Free Model Gateway. Multi-provider LLM proxy with OpenRouter free-model auto-discovery, intelligent routing, fallback, and virtual API key management.",
+  "type": "module",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/* --filter=./apps/api run build",
+    "dev:api": "pnpm --filter @freellm/api dev",
+    "dev:web": "pnpm --filter @freellm/web dev",
+    "test": "pnpm -r --workspace-concurrency=1 run test",
+    "test:ui": "vitest --ui",
+    "coverage": "pnpm -r --workspace-concurrency=1 exec vitest run --coverage",
+    "lint": "eslint --config lint.config.mjs 'apps/**/*.{ts,tsx}' 'packages/**/*.ts'",
+    "lint:fix": "eslint --config lint.config.mjs --fix 'apps/**/*.{ts,tsx}' 'packages/**/*.ts'",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
+    "typecheck": "pnpm -r run typecheck",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
+    "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:studio": "prisma studio --schema prisma/schema.prisma",
+    "version:print": "node -e \"console.log(require('fs').readFileSync('./VERSION','utf8').trim())\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.4.2",
+    "prisma": "^6.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "prettier": {
+    "semi": true,
+    "singleQuote": true,
+    "trailingComma": "all",
+    "printWidth": 100,
+    "tabWidth": 2,
+    "useTabs": false,
+    "arrowParens": "always",
+    "endOfLine": "lf"
+  }
+}

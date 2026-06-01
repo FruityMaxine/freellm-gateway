@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞披露
+    url: https://github.com/<owner>/freellm/blob/main/docs/SECURITY.md
+    about: 涉及密钥泄露 / 绕过鉴权 / 提权等安全问题，请按 docs/SECURITY.md 的私下披露流程联系维护者，不要在公开 issue 中提及。
+  - name: 架构 / 路线图讨论
+    url: https://github.com/<owner>/freellm/discussions
+    about: 关于架构方向、Roadmap 优先级、设计取舍的开放讨论，请走 Discussions 而非 Issues。

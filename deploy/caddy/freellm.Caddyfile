@@ -1,0 +1,111 @@
+# FreeLLM Caddy 反代片段（粘贴到 /etc/caddy/Caddyfile 末尾，然后 caddy reload）。
+#
+# 三层守门思路（参 polyham/AI council/Vega Dashboard 沿用做法）：
+# - token query：?pass=<32 hex>  首次进入下发 Cookie，重定向去 query
+# - Cookie：freellm_pass=<token>  整天免登
+# - Referer 同源：example.com  备用通道
+# - 三关全不命中 → 302 踢回 Homepage（portal）
+#
+# 公网入口端口：
+#   :28000  → API（仅暴露 OpenAI 兼容 /v1/* 给已认证的下游虚拟密钥）
+#   :28010  → Web 管理后台（守门）
+#
+# 替换前必做：
+#   1. 生成两把独立 token：node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+#      → 一把给 FREELLM_API_TOKEN，一把给 FREELLM_WEB_TOKEN
+#   2. 在 /opt/homepage/config/services.yaml 加 FreeLLM 卡片：
+#      href: http://<server>:28010/?pass=<FREELLM_WEB_TOKEN>
+#   3. UFW 放行：ufw allow 28000/tcp comment "freellm api entry"
+#                ufw allow 28010/tcp comment "freellm web entry"
+
+:28000 {
+	log {
+		output file /var/log/caddy/freellm-api.log
+		format json
+	}
+
+	# 健康检查任意放行
+	handle /health {
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle /ready {
+		reverse_proxy 127.0.0.1:3001
+	}
+
+	# /v1/* 是给下游应用调的（带虚拟密钥 Bearer），无须 Cookie 守门 — 鉴权在 API 层 plugin。
+	handle /v1/* {
+		reverse_proxy 127.0.0.1:3001 {
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# /admin/* 与其它路径走与 web 同款 token+cookie+referer 守门。
+	@admin_token query pass=REPLACE_WITH_FREELLM_API_TOKEN
+	handle @admin_token {
+		header Set-Cookie "freellm_api_pass=REPLACE_WITH_FREELLM_API_TOKEN; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400"
+		redir {http.request.uri.path}{http.request.uri.query_string_minus_pass} 302
+	}
+
+	@admin_cookie header_regexp Cookie ^.*freellm_api_pass=REPLACE_WITH_FREELLM_API_TOKEN.*$
+	@admin_referer header_regexp Referer ^https://portal\.example\.org
+	handle @admin_cookie {
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle @admin_referer {
+		header Set-Cookie "freellm_api_pass=REPLACE_WITH_FREELLM_API_TOKEN; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400"
+		reverse_proxy 127.0.0.1:3001
+	}
+
+	# 三关均不命中 → 踢回 Homepage（必须用 handle 兜底,否则 redir 会先于上面的 reverse_proxy 触发）
+	handle {
+		redir https://example.com/ 302
+	}
+}
+
+:28010 {
+	log {
+		output file /var/log/caddy/freellm-web.log
+		format json
+	}
+
+	# token query
+	@web_token query pass=REPLACE_WITH_FREELLM_WEB_TOKEN
+	handle @web_token {
+		header Set-Cookie "freellm_web_pass=REPLACE_WITH_FREELLM_WEB_TOKEN; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400"
+		redir {http.request.uri.path}{http.request.uri.query_string_minus_pass} 302
+	}
+
+	# Cookie 守门
+	@web_cookie header_regexp Cookie ^.*freellm_web_pass=REPLACE_WITH_FREELLM_WEB_TOKEN.*$
+	@web_referer header_regexp Referer ^https://portal\.example\.org
+	handle @web_cookie {
+		# Web 是 SPA 静态资源 + 把 /v1/admin 反代到 API
+		handle /v1/* {
+			reverse_proxy 127.0.0.1:3001
+		}
+		handle /admin/* {
+			reverse_proxy 127.0.0.1:3001
+		}
+		handle {
+			reverse_proxy 127.0.0.1:8080
+		}
+	}
+	handle @web_referer {
+		header Set-Cookie "freellm_web_pass=REPLACE_WITH_FREELLM_WEB_TOKEN; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400"
+		handle /v1/* {
+			reverse_proxy 127.0.0.1:3001
+		}
+		handle /admin/* {
+			reverse_proxy 127.0.0.1:3001
+		}
+		handle {
+			reverse_proxy 127.0.0.1:8080
+		}
+	}
+
+	handle {
+		redir https://example.com/ 302
+	}
+}

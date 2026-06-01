@@ -1,0 +1,464 @@
+// FreeLLM 数据库 schema —— PostgreSQL 变体（Tick 21 v1.4.0.0 引入）。
+//
+// 本文件是 prisma/schema.prisma 的 PostgreSQL 等价物，仅 datasource 行不同。
+// 字段类型 / @unique / @relation / cascade 规则与 SQLite 版本一致，
+// 兑现 Phase 0 选型时锁定的「Postgres-compatible schema」承诺。
+//
+// 用法（详见 docs/MIGRATION_POSTGRES.md）：
+//   DATABASE_URL=postgresql://... \
+//   pnpm prisma migrate deploy --schema prisma/schema.postgres.prisma
+//   pnpm prisma generate        --schema prisma/schema.postgres.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── identity ─────────────────────────────
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  enabled      Boolean   @default(true)
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  lastLoginAt  DateTime?
+  lastLoginIp  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions Session[]
+
+  @@map("admin_users")
+}
+
+model Session {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String    @unique
+  userAgent   String?
+  ip          String?
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+
+  user AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ───────────────────────────── providers ─────────────────────────────
+
+model Provider {
+  id                String    @id @default(cuid())
+  slug              String    @unique // e.g. "openrouter", "openai", "mock"
+  kind              String // openrouter | openai | anthropic | deepseek | google | openai-compat | mock
+  name              String
+  baseUrl           String
+  enabled           Boolean   @default(true)
+  priority          Int       @default(100)
+  rpmLimit          Int?
+  dailyLimit        Int?
+  timeoutMs         Int       @default(60000)
+  retryPolicyJson   String    @default("{\"maxAttempts\":3,\"backoffMs\":500}")
+  supportsStreaming Boolean   @default(true)
+  compatibleMode    String    @default("openai") // "openai" | "anthropic" | "google"
+  headerOverrides   String?   // JSON map of extra headers
+  region            String?
+  status            String    @default("active") // active | degraded | rate_limited | disabled
+  errorCount24h     Int       @default(0)
+  lastSuccessAt     DateTime?
+  lastErrorAt       DateTime?
+  lastErrorMessage  String?
+  lastSyncAt        DateTime?
+  balanceJson       String?   // last-known balance / usage / limit_remaining
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  upstreamKeys UpstreamKey[]
+  models       Model[]
+  cooldowns    Cooldown[]
+  routeAttempts RouteAttempt[]
+  errorEvents   ErrorEvent[]
+  healthChecks  HealthCheck[]
+
+  @@map("providers")
+}
+
+model UpstreamKey {
+  id            String    @id @default(cuid())
+  providerId    String
+  label         String
+  // Ciphertext from SecretStore — never logged, never returned to the frontend.
+  cipherText    String
+  keyDigest     String // sha256 prefix, used only for display ("sk-…ab12")
+  enabled       Boolean   @default(true)
+  priority      Int       @default(100)
+  rpmLimit      Int?
+  dailyLimit    Int?
+  lastUsedAt    DateTime?
+  errorCount24h Int       @default(0)
+  notes         String?
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@map("upstream_keys")
+}
+
+// ───────────────────────────── tenancy (Tick 19 v1.3.0.0) ─────────────────────────────
+
+/// 组织：多租户最外层划分。一个 Organization 可以含多个 Project。
+/// v1.3 仅做数据模型 + UI skeleton；per-org rate limit / webhook 留 v1.3 后期。
+model Organization {
+  id           String    @id @default(cuid())
+  name         String
+  slug         String    @unique
+  billingEmail String?
+  // Tick 20 v1.3.1.0：组织级 RPM 限额；null 表示不强制（受单 VK 限额保护）。
+  rpmLimit     Int?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  projects     Project[]
+
+  @@map("organizations")
+}
+
+/// 项目：Organization 内部的工作单元。VirtualKey 归属到 Project。
+/// 单 Organization 内 slug 唯一（不强制全局唯一）。
+model Project {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  virtualKeys  VirtualKey[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@map("projects")
+}
+
+// ───────────────────────────── virtual keys (downstream) ─────────────────────────────
+
+model VirtualKey {
+  id                  String    @id @default(cuid())
+  // Hash of the full secret; the secret itself is shown to the user once and never persisted.
+  hash                String    @unique
+  prefix              String // "fllm_live_abcd" — visible in lists
+  label               String
+  environment         String    @default("live") // "live" | "test"
+  enabled             Boolean   @default(true)
+  allowedModelsJson   String?   // JSON array of model ids/aliases
+  deniedModelsJson    String?   // JSON array
+  allowedProvidersJson String?  // JSON array of provider slugs
+  maxRequestsPerMinute Int?
+  maxRequestsPerDay   Int?
+  maxTokensPerDay     Int?
+  // Tick 17 v1.1.0.0：新增日 embeddings 调用上限。null 表示无限制。
+  maxEmbeddingsPerDay Int?
+  allowPaidModels     Boolean   @default(false)
+  allowStreaming      Boolean   @default(true)
+  expiresAt           DateTime?
+  lastUsedAt          DateTime?
+  lastUsedIp          String?
+  totalRequests       Int       @default(0)
+  totalTokens         BigInt    @default(0)
+  tagsJson            String?
+  notes               String?
+  createdBy           String? // admin user id
+  createdAt           DateTime  @default(now())
+  revokedAt           DateTime?
+  updatedAt           DateTime  @updatedAt
+  // Tick 19 v1.3.0.0：归属项目（nullable 以兼容旧 key；seed 时 backfill 到 Default Project）。
+  projectId           String?
+
+  requestLogs RequestLog[]
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([enabled])
+  @@index([projectId])
+  @@map("virtual_keys")
+}
+
+// ───────────────────────────── models & discovery ─────────────────────────────
+
+model Model {
+  id              String  @id @default(cuid())
+  providerId      String
+  // Upstream-native identifier (e.g. "meta-llama/llama-3.3-70b-instruct:free").
+  upstreamId      String
+  family          String? // "llama", "qwen", "gemma" — derived from upstreamId
+  displayName     String
+  contextLength   Int     @default(0)
+  isFree          Boolean @default(false)
+  isFreeReason    String? // pricing | suffix | heuristic | manual
+  pricingJson     String? // JSON of {prompt, completion, request, image, …}
+  capabilitiesJson String  @default("{}") // {stream, json, tools, vision, audio}
+  paramsSupported String? // JSON array of supported_parameters
+  status          String  @default("active") // active | degraded | rate_limited | disabled | removed | paid_now
+  manualOverride  String? // "force_enabled" | "force_disabled" | null
+  weightAdj       Float   @default(0) // operator-applied score nudge (±)
+  blacklisted     Boolean @default(false)
+  whitelisted     Boolean @default(false)
+  description     String?
+  topProvider     String?
+  lastSeenAt      DateTime?
+  firstSeenAt     DateTime  @default(now())
+  removedAt       DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  provider     Provider        @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  snapshots    ModelSnapshot[]
+  scores       ModelScore?
+  cooldowns    Cooldown[]
+  routeAttempts RouteAttempt[]
+  errorEvents   ErrorEvent[]
+  healthChecks  HealthCheck[]
+
+  @@unique([providerId, upstreamId])
+  @@index([isFree, status])
+  @@index([status])
+  @@map("models")
+}
+
+model ModelSnapshot {
+  id          String   @id @default(cuid())
+  modelId     String?
+  providerId  String
+  upstreamId  String
+  // Full raw payload returned by the upstream at sync time — kept for diff/audit.
+  payloadJson String
+  isFree      Boolean
+  contextLength Int    @default(0)
+  takenAt     DateTime @default(now())
+
+  model Model? @relation(fields: [modelId], references: [id], onDelete: SetNull)
+
+  @@index([providerId, upstreamId, takenAt])
+  @@map("model_snapshots")
+}
+
+model ModelScore {
+  id                  String   @id @default(cuid())
+  modelId             String   @unique
+  availabilityScore   Float    @default(0.5)
+  latencyScore        Float    @default(0.5)
+  rateLimitScore      Float    @default(0.5)
+  qualityScore        Float    @default(0.5)
+  contextScore        Float    @default(0.5)
+  capabilityScore     Float    @default(0.5)
+  freshnessScore      Float    @default(0.5)
+  costScore           Float    @default(1.0) // 1 for free models
+  stabilityScore      Float    @default(0.5)
+  firstTokenLatencyMs Int?
+  avgLatencyMs        Int?
+  successCount24h     Int      @default(0)
+  failureCount24h     Int      @default(0)
+  rateLimit24h        Int      @default(0)
+  composite           Float    @default(0)
+  explanationJson     String?  // last computed ScoreExplanation
+  updatedAt           DateTime @updatedAt
+
+  model Model @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@index([composite])
+  @@map("model_scores")
+}
+
+// ───────────────────────────── routing ─────────────────────────────
+
+model RoutingPolicy {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  description  String?
+  // Active policy is the one used as a default when a virtual key does not pin one.
+  isDefault    Boolean  @default(false)
+  mode         String   @default("auto-best-free") // auto-best-free | round-robin-free | weighted-free | openrouter-free-router | prefer-model-fallback | provider-specific | paid-allowed
+  weightsJson  String   @default("{}") // weight map for scorer; falls back to built-in defaults
+  paramsJson   String?  // policy-specific params (e.g. allowed providers)
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("routing_policies")
+}
+
+model Cooldown {
+  id          String   @id @default(cuid())
+  scope       String // "model" | "provider"
+  modelId     String?
+  providerId  String?
+  reason      String // "429" | "5xx" | "timeout" | "auth" | "manual" | …
+  attempts    Int      @default(1)
+  backoffMs   Int
+  expiresAt   DateTime
+  halfOpen    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+
+  model    Model?    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  provider Provider? @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([scope, expiresAt])
+  @@index([modelId])
+  @@index([providerId])
+  @@map("cooldowns")
+}
+
+// ───────────────────────────── telemetry ─────────────────────────────
+
+model RequestLog {
+  id            String   @id @default(cuid())
+  requestId     String   @unique
+  virtualKeyId  String?
+  upstreamModel String?
+  upstreamProvider String?
+  modelAlias    String?  // free/auto, etc.
+  routingMode   String?
+  streaming     Boolean  @default(false)
+  status        Int? // HTTP status returned to downstream
+  errorKind     String?
+  attempts      Int      @default(0)
+  promptTokens  Int      @default(0)
+  completionTokens Int   @default(0)
+  totalTokens   Int      @default(0)
+  promptDigest  String? // sha256 of prompt, if FREELLM_LOG_PROMPT_DIGEST=true
+  promptText    String? // populated only when FREELLM_LOG_FULL_PROMPT=true
+  startedAt     DateTime @default(now())
+  finishedAt    DateTime?
+  durationMs    Int?
+  firstTokenMs  Int?
+  clientIp      String?
+  userAgent     String?
+  notes         String?
+  // Tick 20 v1.3.1.0：租户切片字段（VK 鉴权时同步写入；旧记录为 null 兼容）。
+  organizationId String?
+  projectId      String?
+
+  virtualKey VirtualKey?    @relation(fields: [virtualKeyId], references: [id], onDelete: SetNull)
+  attemptsList RouteAttempt[]
+
+  @@index([startedAt])
+  @@index([virtualKeyId])
+  @@index([status])
+  @@index([organizationId])
+  @@index([projectId])
+  @@map("request_logs")
+}
+
+model RouteAttempt {
+  id            String   @id @default(cuid())
+  requestId     String
+  ordinal       Int // attempt number within this request, starting at 1
+  providerId    String?
+  modelId       String?
+  upstreamModel String?
+  startedAt     DateTime @default(now())
+  finishedAt    DateTime?
+  durationMs    Int?
+  firstTokenMs  Int?
+  status        Int?
+  errorKind     String?
+  errorMessage  String?
+  bytesIn       Int      @default(0)
+  bytesOut      Int      @default(0)
+  cooldownTriggered Boolean @default(false)
+  notes         String?
+
+  requestLog RequestLog @relation(fields: [requestId], references: [requestId], onDelete: Cascade)
+  provider   Provider?  @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  model      Model?     @relation(fields: [modelId], references: [id], onDelete: SetNull)
+
+  @@index([requestId])
+  @@index([modelId])
+  @@map("route_attempts")
+}
+
+model ErrorEvent {
+  id          String   @id @default(cuid())
+  kind        String // model_change | provider_outage | auth_failure | 429_storm | content_filter | unknown
+  severity    String   @default("warn") // info | warn | error | critical
+  providerId  String?
+  modelId     String?
+  requestId   String?
+  message     String
+  detailsJson String?
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  provider Provider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  model    Model?    @relation(fields: [modelId], references: [id], onDelete: SetNull)
+
+  @@index([kind, createdAt])
+  @@index([severity, resolvedAt])
+  @@map("error_events")
+}
+
+model HealthCheck {
+  id           String   @id @default(cuid())
+  scope        String // "provider" | "model"
+  providerId   String?
+  modelId      String?
+  ok           Boolean
+  latencyMs    Int?
+  errorKind    String?
+  errorMessage String?
+  detailsJson  String?
+  takenAt      DateTime @default(now())
+
+  provider Provider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  model    Model?    @relation(fields: [modelId], references: [id], onDelete: SetNull)
+
+  @@index([scope, takenAt])
+  @@map("health_checks")
+}
+
+model UsageDaily {
+  id           String   @id @default(cuid())
+  day          DateTime // truncated to UTC midnight
+  virtualKeyId String?
+  providerId   String?
+  modelId      String?
+  requests     Int      @default(0)
+  successes    Int      @default(0)
+  failures     Int      @default(0)
+  rateLimits   Int      @default(0)
+  promptTokens BigInt   @default(0)
+  completionTokens BigInt @default(0)
+  totalTokens  BigInt   @default(0)
+  avgLatencyMs Int?
+
+  @@unique([day, virtualKeyId, providerId, modelId])
+  @@index([day])
+  @@map("usage_daily")
+}
+
+// ───────────────────────────── settings ─────────────────────────────
+
+model Setting {
+  key       String   @id
+  value     String // JSON-encoded payload
+  category  String   @default("general")
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}

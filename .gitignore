@@ -1,0 +1,54 @@
+node_modules
+.pnpm-store
+.pnpm-debug.log*
+dist
+build
+.turbo
+.next
+out
+
+# env
+.env
+.env.local
+.env.*.local
+
+# db / runtime
+*.db
+*.db-journal
+prisma/migrations/dev.db*
+data/
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+*.swp
+*.swo
+.DS_Store
+
+# logs
+*.log
+logs/
+.npm
+.eslintcache
+.tsbuildinfo
+*.tsbuildinfo
+
+# tests / coverage
+coverage
+.nyc_output
+.vitest-cache
+playwright-report
+test-results
+
+# misc
+.cache
+tmp
+.temp
+
+# Python venv (Playwright bundle 等大文件; 历史已 filter-repo 清)
+.venv/
+venv/
+__pycache__/
+*.pyc

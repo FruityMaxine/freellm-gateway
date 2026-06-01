@@ -1,0 +1,48 @@
+[Unit]
+Description=FreeLLM API (Fastify + Prisma + SQLite)
+Documentation=file:///opt/freellm/docs/DEPLOYMENT.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=freellm
+Group=freellm
+WorkingDirectory=/opt/freellm
+EnvironmentFile=/opt/freellm/.env
+# Bind loopback only; Caddy fronts the public :28000 entry.
+Environment=FREELLM_NODE_ENV=production
+Environment=FREELLM_API_HOST=127.0.0.1
+Environment=FREELLM_API_PORT=3001
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/freellm/apps/api/dist/server.js
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# Hardening (systemd does NOT support inline comments after directives — keep them on their own lines).
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/opt/freellm/data
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+MemoryMax=900M
+CPUQuota=160%
+LimitNOFILE=8192
+
+# Logging through journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=freellm-api
+
+[Install]
+WantedBy=multi-user.target

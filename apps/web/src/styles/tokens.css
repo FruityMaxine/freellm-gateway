@@ -1,0 +1,88 @@
+/* FreeLLM CSS variables — mirror packages/ui/src/design-tokens.ts.
+ * Tailwind v4 reads these through `@theme inline` in global.css. */
+
+:root,
+.dark {
+  /* Brand */
+  --color-primary: #faff69;
+  --color-primary-active: #e6eb52;
+  --color-primary-disabled: #3a3a1f;
+  --color-on-primary: #0a0a0a;
+
+  /* Inks (dark default) */
+  --color-ink: #ffffff;
+  --color-body: #cccccc;
+  --color-body-strong: #e6e6e6;
+  --color-muted: #888888;
+  --color-muted-soft: #5a5a5a;
+
+  /* Surfaces */
+  --color-canvas: #0a0a0a;
+  --color-surface-soft: #121212;
+  --color-surface-card: #1a1a1a;
+  --color-surface-elevated: #242424;
+  --color-surface-glow: #2f2f2f;
+
+  /* Hairlines */
+  --color-hairline: #2a2a2a;
+  --color-hairline-strong: #3a3a3a;
+
+  /* Accents */
+  --color-accent-emerald: #22c55e;
+  --color-accent-rose: #ef4444;
+  --color-accent-blue: #3b82f6;
+  --color-accent-cyan: #06b6d4;
+  --color-accent-magenta: #d946ef;
+  --color-accent-amber: #f59e0b;
+  --color-accent-violet: #8b5cf6;
+
+  /* Semantic */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 28px;
+
+  /* Shadows */
+  --shadow-glow: 0 0 0 1px rgba(250, 255, 105, 0.18), 0 8px 28px -8px rgba(250, 255, 105, 0.32);
+  --shadow-glow-soft: 0 0 0 1px rgba(250, 255, 105, 0.08),
+    0 4px 14px -4px rgba(250, 255, 105, 0.16);
+  --shadow-card: 0 1px 0 0 rgba(255, 255, 255, 0.04) inset, 0 1px 2px 0 rgba(0, 0, 0, 0.6),
+    0 8px 24px -12px rgba(0, 0, 0, 0.7);
+  --shadow-elevated: 0 1px 0 0 rgba(255, 255, 255, 0.06) inset, 0 4px 8px 0 rgba(0, 0, 0, 0.5),
+    0 24px 48px -16px rgba(0, 0, 0, 0.8);
+  --shadow-hairline: 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-focus: 0 0 0 2px rgba(250, 255, 105, 0.4), 0 0 0 4px rgba(10, 10, 10, 1);
+
+  /* Motion */
+  --motion-fast: 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-base: 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-slow: 400ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Fonts */
+  --font-sans: 'Inter var', Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.light {
+  --color-canvas: #ffffff;
+  --color-surface-soft: #fafafa;
+  --color-surface-card: #f5f5f5;
+  --color-surface-elevated: #ebebeb;
+  --color-surface-glow: #e0e0e0;
+  --color-ink: #0a0a0a;
+  --color-body: #3a3a3a;
+  --color-body-strong: #171717;
+  --color-muted: #888888;
+  --color-muted-soft: #b0b0b0;
+  --color-hairline: #e5e5e5;
+  --color-hairline-strong: #d4d4d4;
+  --color-on-primary: #0a0a0a;
+}

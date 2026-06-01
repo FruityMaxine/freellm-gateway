@@ -1,0 +1,11 @@
+export * from './types.js';
+export * from './config-schema.js';
+export * from './base.js';
+export * from './openai-compat.js';
+export * from './registry.js';
+export * from './errors.js';
+export * from './free-detector.js';
+export * from './providers/openrouter.js';
+export * from './providers/mock-openrouter.js';
+export * from './providers/multi-scenario-mock.js';
+export { FIXTURE_OPENROUTER_MODELS, FIXTURE_OPENROUTER_KEY_RESPONSE } from './providers/openrouter-fixtures.js';
